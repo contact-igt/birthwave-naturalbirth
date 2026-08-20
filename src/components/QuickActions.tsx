@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { trackEvent } from "@/lib/analytics";
 import { site } from "@/lib/site";
 
-const BOOK_HREF = "/contact#contact-form";
+const BOOK_HREF = "#contact-form";
 
 function useHideOnFocus() {
   const [hidden, setHidden] = useState(false);

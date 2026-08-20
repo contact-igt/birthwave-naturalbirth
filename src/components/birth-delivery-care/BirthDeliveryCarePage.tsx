@@ -357,6 +357,7 @@ export function BirthDeliveryCarePage() {
 
       {/* SECTION 11: ENQUIRY / BOOKING */}
       <section id="contact-form" className="scroll-mt-[100px] bg-cream/45 py-16 md:py-24">
+        <span id="enquiry" className="scroll-mt-[100px] block" aria-hidden="true" />
         <Container className="max-w-3xl">
           <div className="text-center max-w-xl mx-auto">
             <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-rose">

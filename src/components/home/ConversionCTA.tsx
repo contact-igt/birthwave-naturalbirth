@@ -24,7 +24,7 @@ export function ConversionCTA() {
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-4">
             <a
-              href="#enquiry"
+              href="#contact-form"
               className="rounded-full bg-brown px-7 py-3.5 text-[15px] font-semibold text-white transition-all duration-150 hover:bg-brown-600 active:scale-[0.98] active:bg-brown-700"
             >
               Book Appointment

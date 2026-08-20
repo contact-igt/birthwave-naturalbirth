@@ -8,7 +8,7 @@ export function EnquirySection({
   heading = "Send an enquiry",
   body = "Prefer to write ahead? Fill this in and continue on WhatsApp.",
   defaultService,
-  id = "enquiry",
+  id = "contact-form",
 }: {
   heading?: string;
   body?: string;
