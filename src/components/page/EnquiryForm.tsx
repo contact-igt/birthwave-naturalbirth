@@ -39,7 +39,7 @@ export function EnquiryForm({ defaultService }: { defaultService?: string } = {}
       serviceLabel && `Interested in: ${serviceLabel}`,
       message && `Message: ${message}`,
     ].filter(Boolean);
-    return `https://wa.me/919363031925?text=${encodeURIComponent(lines.join("\n"))}`;
+    return `https://wa.me/${site.whatsappRaw}?text=${encodeURIComponent(lines.join("\n"))}`;
   }
 
   async function handleSubmit(e: React.FormEvent) {
