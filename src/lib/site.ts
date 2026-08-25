@@ -14,9 +14,10 @@ export const site = {
   cugPhone: "+91 98407 98472",
   cugPhoneRaw: "9840798472",
   cugPhoneHref: "tel:+919840798472",
-  whatsapp: "+91 93630 31925",
+  whatsapp: "+91 79042 51378",
+  whatsappRaw: "917904251378",
   whatsappHref:
-    "https://wa.me/919363031925?text=" +
+    "https://wa.me/917904251378?text=" +
     encodeURIComponent("Hi, I'd like to book an appointment with The Birth Wave."),
   email: "drsantoshi@thebirthwave.com",
   address: {
