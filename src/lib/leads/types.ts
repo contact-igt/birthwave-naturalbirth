@@ -29,6 +29,7 @@ export type LeadInput = {
   service: string;
   message?: string;
   consent: boolean;
+  ip_address?: string | null;
   honeypot?: string; // spam trap — must arrive empty
   attribution: LeadAttribution;
 };

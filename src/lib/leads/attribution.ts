@@ -2,12 +2,13 @@
 
 import type { LeadAttribution } from "./types";
 
-// Minimal first-party attribution: first-touch campaign context (source/
-// campaign/creative/UTMs/click ids) is captured once and kept in
-// localStorage for the lifetime of the browser profile — no fingerprinting,
-// no third-party cookies. Landing page and referrer always reflect the
-// CURRENT page, since that's genuinely where this enquiry came from.
-const STORAGE_KEY = "birthwave_first_touch";
+// First-touch campaign attribution, resolved the same way as the VLS lead
+// pipeline: campaign params win, then Google/Meta click ids, then the
+// referring hostname, then "direct". Values are never left empty — a lead
+// with no campaign context is recorded as source "direct" / medium "none".
+// The first resolved touch is persisted in localStorage for the browser
+// profile's lifetime; a later visit carrying fresh campaign params replaces it.
+const STORAGE_KEY = "birthwave_first_touch_v3";
 
 type StoredTouch = {
   source: string | null;
@@ -22,79 +23,132 @@ type StoredTouch = {
   fbclid: string | null;
 };
 
-function inferSource(params: URLSearchParams, referrer: string): string | null {
-  const utmSource = params.get("utm_source");
-  if (utmSource) return utmSource;
-  if (params.get("gclid")) return "Google";
-  if (params.get("fbclid")) return "Meta";
-  if (referrer && !referrer.includes(window.location.hostname)) {
-    try {
-      return new URL(referrer).hostname.replace(/^www\./, "");
-    } catch {
-      return "Referral";
-    }
-  }
-  return referrer ? "Referral" : "Organic";
-}
+// Short campaign codes → canonical host (as used across the VLS forms).
+const UTM_SOURCE_MAP: Record<string, string> = {
+  fb: "facebook.com",
+  ig: "instagram.com",
+  insta: "instagram.com",
+  meta: "facebook.com",
+  yt: "youtube.com",
+  li: "linkedin.com",
+  tw: "twitter.com",
+  x: "twitter.com",
+  gads: "google.com",
+  google: "google.com",
+  googleads: "google.com",
+};
 
-function captureFromCurrentUrl(): StoredTouch {
+const CAMPAIGN_KEYS = [
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "utm_term",
+  "gclid",
+  "fbclid",
+] as const;
+
+const isDirect = (value: string): boolean =>
+  !value || value === "direct" || value.includes("localhost") || value.includes("127.0.0.1");
+
+// Friendly label for the admin "Source" column.
+const toSourceLabel = (utmSource: string): string => {
+  const s = utmSource.toLowerCase();
+  if (isDirect(s)) return "Direct";
+  if (s.includes("google")) return "Google";
+  if (s.includes("facebook") || s.includes("instagram")) return "Meta";
+  if (s.includes("youtube")) return "YouTube";
+  if (s.includes("linkedin")) return "LinkedIn";
+  if (s.includes("twitter") || s === "x.com" || s === "t.co") return "Twitter/X";
+  if (s === "organic" || s === "none") return "Organic";
+  return utmSource; // a referring hostname
+};
+
+function resolveTouch(): StoredTouch {
   const params = new URLSearchParams(window.location.search);
   const referrer = document.referrer || "";
+
+  let utm_source = params.get("utm_source");
+  if (utm_source) {
+    utm_source = UTM_SOURCE_MAP[utm_source.toLowerCase()] || utm_source;
+  } else if (params.get("gclid")) {
+    utm_source = "google.com";
+  } else if (params.get("fbclid")) {
+    utm_source = "facebook.com";
+  } else if (referrer) {
+    try {
+      utm_source = new URL(referrer).hostname.replace(/^www\./, "");
+    } catch {
+      utm_source = "direct";
+    }
+  } else {
+    utm_source = "direct";
+  }
+
+  let utm_medium = params.get("utm_medium");
+  let utm_campaign = params.get("utm_campaign");
+  let utm_content = params.get("utm_content");
+  let utm_term = params.get("utm_term");
+
+  if (isDirect(utm_source.toLowerCase())) {
+    utm_source = "direct";
+    utm_medium = "none";
+    utm_campaign = "none";
+    utm_content = "none";
+    utm_term = "none";
+  } else {
+    utm_medium =
+      utm_medium ||
+      (params.get("gclid") ? "cpc" : params.get("fbclid") ? "paid-social" : "referral");
+    utm_campaign = utm_campaign || "none";
+    utm_content = utm_content || "none";
+    utm_term = utm_term || "none";
+  }
+
   return {
-    source: inferSource(params, referrer),
-    campaign: params.get("utm_campaign"),
-    creative: params.get("utm_content"),
-    utm_source: params.get("utm_source"),
-    utm_medium: params.get("utm_medium"),
-    utm_campaign: params.get("utm_campaign"),
-    utm_content: params.get("utm_content"),
-    utm_term: params.get("utm_term"),
+    source: toSourceLabel(utm_source),
+    campaign: utm_campaign,
+    creative: utm_content,
+    utm_source,
+    utm_medium,
+    utm_campaign,
+    utm_content,
+    utm_term,
     gclid: params.get("gclid"),
     fbclid: params.get("fbclid"),
   };
 }
 
-function readStoredTouch(): StoredTouch | null {
+function readStored(): StoredTouch | null {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as StoredTouch) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredTouch>;
+    // A valid touch always carries a resolved (never-null) utm_source.
+    if (!parsed || typeof parsed.utm_source !== "string" || !parsed.utm_source) return null;
+    return parsed as StoredTouch;
   } catch {
     return null;
   }
 }
 
-function writeStoredTouch(touch: StoredTouch) {
+function writeStored(touch: StoredTouch): void {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(touch));
   } catch {
-    // localStorage unavailable (private mode etc.) — attribution just won't
-    // persist across visits; current-page attribution below still works.
+    // localStorage unavailable (private mode etc.) — current-page resolution
+    // in getAttribution() still works, it just won't persist across visits.
   }
 }
 
-/** Call once when the app mounts — persists first-touch if not already set. */
-export function ensureFirstTouchCaptured() {
+/** Call once when the app/form mounts — persists first-touch if not already set. */
+export function ensureFirstTouchCaptured(): void {
   if (typeof window === "undefined") return;
   const params = new URLSearchParams(window.location.search);
-  const hasCampaignParams = [
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "utm_content",
-    "utm_term",
-    "gclid",
-    "fbclid",
-  ].some((k) => params.has(k));
-
-  const existing = readStoredTouch();
+  const hasCampaignParams = CAMPAIGN_KEYS.some((k) => params.has(k));
+  const existing = readStored();
   if (!existing || hasCampaignParams) {
-    // First visit ever, OR arriving with fresh campaign params on a later
-    // visit — either way, this is a real touch worth recording. We keep
-    // whichever touch is the FIRST one seen (don't overwrite silently)
-    // unless this visit actually carries campaign params.
-    if (!existing || hasCampaignParams) {
-      writeStoredTouch(captureFromCurrentUrl());
-    }
+    writeStored(resolveTouch());
   }
 }
 
@@ -102,23 +156,23 @@ export function ensureFirstTouchCaptured() {
 export function getAttribution(): LeadAttribution {
   if (typeof window === "undefined") {
     return {
-      source: null,
-      campaign: null,
-      creative: null,
+      source: "Direct",
+      campaign: "none",
+      creative: "none",
       channel: "Form",
       landing_page: "/",
       referrer: null,
-      utm_source: null,
-      utm_medium: null,
-      utm_campaign: null,
-      utm_content: null,
-      utm_term: null,
+      utm_source: "direct",
+      utm_medium: "none",
+      utm_campaign: "none",
+      utm_content: "none",
+      utm_term: "none",
       gclid: null,
       fbclid: null,
     };
   }
 
-  const stored = readStoredTouch() ?? captureFromCurrentUrl();
+  const stored = readStored() ?? resolveTouch();
 
   return {
     source: stored.source,
