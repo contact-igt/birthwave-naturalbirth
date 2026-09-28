@@ -85,6 +85,7 @@ export function validateLeadInput(body: unknown): ValidationResult {
       service,
       message,
       consent: true,
+      ip_address: str(b.ip_address),
       attribution: {
         source: str(rawAttribution.source),
         campaign: str(rawAttribution.campaign),

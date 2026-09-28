@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { formServiceOptions, getFormServiceTitle } from "@/lib/services";
 import { site } from "@/lib/site";
 import { ensureFirstTouchCaptured, getAttribution } from "@/lib/leads/attribution";
+import { getClientIp, primeClientIp } from "@/lib/leads/ip";
 import { trackEvent } from "@/lib/analytics";
 
 type Status = "idle" | "submitting" | "error";
@@ -16,6 +17,7 @@ export function EnquiryForm({ defaultService }: { defaultService?: string } = {}
 
   useEffect(() => {
     ensureFirstTouchCaptured();
+    primeClientIp();
   }, []);
 
   const [name, setName] = useState("");
@@ -63,6 +65,7 @@ export function EnquiryForm({ defaultService }: { defaultService?: string } = {}
           consent,
           honeypot,
           attribution: getAttribution(),
+          ip_address: await getClientIp(),
         }),
       });
 
